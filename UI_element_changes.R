@@ -7,8 +7,8 @@ ui_mods<-list(
   "baby"=list(
     'remove' = c("#baby","#mom"),
     'add' = list(
-      "diaper" = actionButton("diaper","diaper"),
-      "feed" = actionButton("feed","feed")
+      "diaper" = actionButton("diaper","diaper",icon=icon('poo')),
+      "feed" = actionButton("feed","feed",icon=icon('wheat-awn-circle-exclamation'))
     ),
     'add_location' = "beforeBegin"
   ),
@@ -25,7 +25,7 @@ ui_mods<-list(
     'remove' = c("#diaper","#feed"),
     'add' = list(
       # diaper change time
-      "diaper_time" = timeInput("diaper_time","Time:",value=Sys.time()),
+      "diaper_time" = timeInput("diaper_time","Time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
       # diaper contents
       "contents" = radioButtons(inputId="contents",
                    label="contents",
@@ -42,9 +42,9 @@ ui_mods<-list(
   "feed"=list(
     'remove' = c("#diaper","#feed"),
     'add' = list(
-      'breastfeed' = actionButton('breastfeed','breastfeed'),
-      'bottle_start' = actionButton('bottle_start','started bottle'),
-      'bottle_finish' = actionButton('bottle_finish','finished previously started bottle')
+      'breastfeed' = actionButton('breastfeed','breastfeed',icon=icon('person-breastfeeding')),
+      'bottle_start' = actionButton('bottle_start','started bottle',icon=icon('bottle-droplet')),
+      'bottle_finish' = actionButton('bottle_finish','finished previously started bottle',icon=icon('bottle-droplet',class='light'))
     ),
     'add_location' = "beforeBegin"
   ),
@@ -53,8 +53,8 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       # diaper change time
-      "breast_start" = timeInput("breast_start","Breastfeed start time:",value=Sys.time()),
-      "breast_end" = timeInput("breast_end","Breastfeed end time:",value=Sys.time()),
+      "breast_start" = timeInput("breast_start","Breastfeed start time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "breast_end" = timeInput("breast_end","Breastfeed end time:",value = with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
       #todo: if useful later, add functionality to log each breast separately
       # bools for diaper rash, pee on clothes, butt paste, blowout
       "nipple_shield" = checkboxInput("nipple_shield","Only fed through nipple shield?"),
@@ -67,7 +67,7 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       # diaper change time
-      "bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:",value=Sys.time()),
+      "bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:",value=with_tz(Sys.time(),tz='America/New York'),seconds=FALSE),
       "start_volume" = sliderInput("start_volume","Bottle Volume (fl. oz)",min=0.0,max=4.0,value=2.5,step=.5),
       "delayed_feed" = checkboxInput("delayed_feed","Delayed start (fell asleep before bottle ready etc.)"),
       "finished_bottle" = checkboxInput("finished_bottle", "Finished bottle?") # going to add timer input for finish time in app directly since its just a one-off
@@ -82,7 +82,7 @@ ui_mods<-list(
       #                                  # need to define choices based on previously logged bottles that weren't finished
       #                                  finish_choice_dict[['choice_names']],
       #                                  finish_choice_dict[['choice_values']]),
-      "finish_time" = timeInput("finish_time","Time bottle finished:",value=Sys.time())
+      "finish_time" = timeInput("finish_time","Time bottle finished:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE)
     ),
     'add_location' = "beforeBegin"
   )

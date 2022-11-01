@@ -1,3 +1,12 @@
+#todo: add javascript to display times in client timezone following method described here https://stackoverflow.com/questions/24842229/how-to-retrieve-the-clients-current-time-and-time-zone-when-using-shiny
+
+#todo: add links to the following at bottom of page
+#<a href="https://www.flaticon.com/free-icons/mother" title="mother icons">Mother icons created by Freepik - Flaticon</a>
+# <a href="https://www.flaticon.com/free-icons/infant" title="infant icons">Infant icons created by Freepik - Flaticon</a>
+# <a href="https://www.flaticon.com/free-icons/baby-bottle" title="baby bottle icons">Baby bottle icons created by Freepik - Flaticon</a>
+# <a href="https://www.flaticon.com/free-icons/breastfeeding" title="breastfeeding icons">Breastfeeding icons created by Freepik - Flaticon</a>
+#<a href="https://www.flaticon.com/free-icons/infant" title="infant icons">Infant icons created by Freepik - Flaticon</a>
+
 # Load packages
 library(shiny)
 library(shinysurveys)
@@ -7,6 +16,7 @@ library(shinyTime)
 library(tidyr)
 library(dplyr)
 library(shinydashboard)
+library(lubridate)
 # read in function/dictionary to modify UI
 source('UI_element_changes.R')
 
@@ -27,21 +37,26 @@ workbook_id <- drive_get("baby-log-test2")$id
 ui <- fluidPage(
   tabBox(title=NULL,width=12,id='tabs',
          tabPanel("Record info",class="active",
-                  actionButton("baby","baby"),
-                  actionButton("mom","mom"),),
+                  actionButton("baby","baby",icon=icon('baby')),
+                  actionButton("mom","mom",icon=icon('person-pregnant'))),
          tabPanel("Recent entries",
                   #textOutput("Diaper Records:"),
                   dataTableOutput('diaper_records'),
                   #textOutput("Feed Records:"),
                   dataTableOutput('feed_records')
                   ))
-
 )
 
 # Define shiny server
 server <- function(input, output, session) {
-  diaper_records = read_sheet(workbook_id,"diaper")
-  feed_records = read_sheet(workbook_id,"bottle_start")
+  diaper_records = read_sheet(workbook_id,"diaper")%>%
+    mutate(start_time = as.POSIXct(`Time (UTC)`,tz='EDT'))%>%
+    arrange(desc(start_time))%>%
+    select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Pee On Clothes?`,`Blowout`)
+  feed_records = read_sheet(workbook_id,"bottle_start")%>%
+    mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
+    arrange(desc(start_time))%>%
+    select(start_time,start_volume,delayed_feed,finished_bottle,finish_time_utc)
   output$diaper_records<-renderDataTable({diaper_records})
   output$feed_records<-renderDataTable({feed_records})
   ## LEVEL 1 OBSERVERS: baby or mom
@@ -93,7 +108,7 @@ server <- function(input, output, session) {
       mutate(descriptive = paste0(start_volume,'fl. oz.\n','Started at ',
                                   #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                   as.POSIXct(start_time_utc,
-                                             tz="UTC")%>%as.character(format='%d %b %H:%M',tz=Sys.timezone()),'\n'))%>%
+                                             tz="UTC")%>%as.character(format='%d %b %H:%M',tz='EDT'),'\n'))%>%
       select(descriptive)
     choice_values = unfinished_bottles$start_time_utc
     names(choice_values)<-choice_names$descriptive
@@ -122,8 +137,6 @@ server <- function(input, output, session) {
     # reformat input for bool
     prev_bottle_reformatted = as.character(as.POSIXct(input$previous_bottle,tz='UTC'))
     # already read in bottle log in observer for bottle_finish, correct selected record to finish and re-write sheet
-    print('rows to update:')
-    print(logged_bottles)
     # remove the update row from logged_bottles
     stay_same = logged_bottles%>%
       filter(as.character(start_time_utc)!=prev_bottle_reformatted)%>%
@@ -138,9 +151,12 @@ server <- function(input, output, session) {
     export_subset<-bind_rows(stay_same,updated)
     write_sheet(data = export_subset,
                 ss=workbook_id,sheet='bottle_start')
+    # indicate submission was recorded
+    insertUI(selector=paste0("#submit_",button_id),
+             where="afterEnd",
+             ui=renderText("Entry Submitted"))
+    
   })
-
-  
 }
 # Run the shiny application
 shinyApp(ui, server)
