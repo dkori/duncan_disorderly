@@ -17,17 +17,16 @@ gen_at_a_glance<-function(current_records){
     mutate(descriptive = paste0('<span style="font-weight:bold">latest full feed: </span>', 
                                 start_volume,'fl. oz., ','Started at ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
-                                start_time%>%as.character(format='%d %b %H:%M',tz='EDT'),
+                                start_time%>%as.character(format='%d %b at %H:%M'),
                                 '. Finished at ',
-                                as.POSIXct(finish_time_utc,
-                                           tz="UTC")%>%as.character(format='%d %b %H:%M',tz='EDT')))%>%
+                                finish_time_utc%>%as.character(format='%d %b at %H:%M',tz='EDT')))%>%
     select(descriptive)%>%
     slice(1)%>%
     unlist()
   latest_diaper_change<- current_records$diaper_records%>%
     # make strings of all bool variables
     mutate(contents_str = case_when(Contents=='both'~'pee and poop, ',
-                                    TRUE~'contents'),
+                                    TRUE~paste0(Contents,', ')),
            rash_str = case_when(`Diaper Rash`~'diaper rash, ',
                                 TRUE~''),
            paste_str = case_when(`Butt Paste`~'butt paste applied, ',
@@ -37,7 +36,7 @@ gen_at_a_glance<-function(current_records){
            blowout_str = case_when(`Blowout`~'had blowout, ',
                                    TRUE~''))%>%
     mutate(descriptive = paste0('<span style="font-weight:bold">lastest diaper change: </span>',
-                                as.character(start_time,format='%d %b %H:%M',tz='EDT'),
+                                as.character(start_time,format='%d %b at %H:%M',tz='EDT'),
                                 ', ',contents_str, rash_str, paste_str, pee_clothes_str,
                                 pee_clothes_str, blowout_str))%>%
     slice(1)%>%
@@ -45,19 +44,28 @@ gen_at_a_glance<-function(current_records){
     unlist()
   unfinished_bottle_frame<-current_records$feed_records%>%
     mutate(descriptive = paste0('<span style="font-weight:bold">latest unfinished feed:</span>', 
-                                start_volume,'fl. oz., ','Started at ',
+                                start_volume,'fl. oz., ','Started on ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                 as.POSIXct(start_time,
-                                           tz="UTC")%>%as.character(format='%d %b %H:%M',tz='EDT')))%>%
+                                           tz="UTC")%>%as.character(format='%d %b at %H:%M')))%>%
     filter(finished_bottle==FALSE)
-  if(nrow(unfinished_bottle_frame)>1){
+  if(nrow(unfinished_bottle_frame)>=1){
     unfinished_str = unfinished_bottle_frame[1,]$descriptive
   }else{
     unfinished_str = '<span style="font-weight:bold">No unfinished bottles</span>'
   }
+  # add latest pump
+  latest_pump = current_records$pump_records%>%
+    mutate(descriptive=paste0('<span style="font-weight:bold">Last Pump: </span>',
+                              volume,'fl. oz. pumped on ',
+                              as.character(start_time,format='%d %b at %H:%M'))
+           )%>%
+    slice(1)%>%
+    select(descriptive)%>%
+    unlist()
   # create a string with latest info that will be rendered as text
   latest_str = paste0('<span style="font-weight:bold">Latest entries:</span><br>',
-                      vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change)))
+                      vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change,latest_pump)))
   result_list = list("latest"=latest_str)
   return(result_list)
 }

@@ -57,7 +57,7 @@ options(
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
-workbook_id <- drive_get("baby-log-test2")$id
+workbook_id <- drive_get("baby-log-test3")$id
 
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
@@ -112,10 +112,13 @@ server <- function(input, output, session) {
     arrange(desc(start_time))%>%
     select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Pee On Clothes?`,`Blowout`)
   current_records[['feed_records']]<-read_sheet(workbook_id,"bottle_start")%>%
-    mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
+    #mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
     arrange(desc(start_time))%>%
     select(start_time,start_volume,delayed_feed,finished_bottle,finish_time_utc)
-  current_records[['pump_records']]<-read_sheet(workbook_id,"pump")
+  print("feed records first row")
+  print(current_records[['feed_records']][1,])
+  current_records[['pump_records']]<-read_sheet(workbook_id,"pump")%>%
+    arrange(desc(start_time))
   
   # call function to generate at_a_glance data
   at_a_glance_data<-gen_at_a_glance(current_records)
@@ -193,11 +196,14 @@ server <- function(input, output, session) {
   })
   # add an input for finish_time if finished_bottle is checked
   observeEvent(input$finished_bottle,{
-    if(input$finished_bottle==TRUE){
-      insertUI('#finished_bottle','beforeBegin',
-               timeInput("finish_time", "Time Finished?", value=with_tz(Sys.time(),tzone="America/New_York")))
+    if(input$finished_bottle!=TRUE){
+      removeUI('#finish_start_time-label')
+      removeUI('.shiny-input-container:has(>#finish_start_time)')
     }else{
-      removeUI('#finish_time')
+      print(input$finished_bottle)
+      insertUI('#finished_bottle','beforeBegin',
+               #timeInput("finish_time", "Time Finished?", value=with_tz(Sys.time(),tzone="America/New_York"))
+               timeslide("finish_start_time","Time Finished?"))
     }
   })
   observeEvent(input$bottle_finish,{
@@ -211,10 +217,10 @@ server <- function(input, output, session) {
       choice_names = unfinished_bottles%>%
         mutate(descriptive = paste0(start_volume,'fl. oz.\n','Started at ',
                                     #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
-                                    as.POSIXct(start_time_utc,
+                                    as.POSIXct(start_time,
                                                tz="UTC")%>%as.character(format='%d %b %H:%M',tz='EDT'),'\n'))%>%
         select(descriptive)
-      choice_values = unfinished_bottles$start_time_utc
+      choice_values = unfinished_bottles$start_time
       names(choice_values)<-choice_names$descriptive
       modify_ui(button_id="bottle_finish",mod_dict=ui_mods)
       # add radio buttons to select which unfinished bottle should be updated to finished
@@ -223,7 +229,7 @@ server <- function(input, output, session) {
                            # need to define choices based on previously logged bottles that weren't finished
                            choice_values,
                            selected=choice_values[[1]]))
-      
+
     }else{
       insertUI(selector="#bottle_finish",
                where="afterEnd",
@@ -238,24 +244,31 @@ server <- function(input, output, session) {
     submit_info("bottle_start",ui_mods,input,workbook_id)
   })
   observeEvent(input$submit_bottle_finish,{
-    finish_time_reformatted<-input$finish_time
+    finish_time_reformatted<-with_tz(input$finish_time,'America/New_York')
     logged_bottles<-googlesheets4::read_sheet(ss=workbook_id, sheet="bottle_start")%>%
       as.data.frame()
+    print(logged_bottles$finish_time_utc[[1]])
     # reformat input for bool
     prev_bottle_reformatted = as.character(as.POSIXct(input$previous_bottle,tz='UTC'))
     # already read in bottle log in observer for bottle_finish, correct selected record to finish and re-write sheet
     # remove the update row from logged_bottles
     stay_same = logged_bottles%>%
-      filter(as.character(start_time_utc)!=prev_bottle_reformatted)%>%
+      filter(as.character(start_time)!=prev_bottle_reformatted)%>%
       mutate(finish_time_utc = as.POSIXlt(finish_time_utc))
     to_update = logged_bottles%>%
-      filter(as.character(start_time_utc)==prev_bottle_reformatted)
-    updated<-data.frame("start_time_utc"=to_update$start_time_utc,
+      filter(as.character(start_time)==prev_bottle_reformatted)
+    updated<-data.frame("start_time"=to_update$start_time,
                         start_volume = to_update$start_volume,
                         delayed_feed = to_update$delayed_feed,
                         finished_bottle = TRUE,
-                        finish_time_utc = input$finish_time)
+                        # forcing timezone to UTC since sheet will always assume UTC, even though actual recorded time will be EDT
+                        finish_time_utc = force_tz(input$finish_time,'UTC'))
+    print(stay_same$finish_time_utc[[1]])
+    print(updated$finish_time_utc[[1]])
     export_subset<-bind_rows(stay_same,updated)
+    print(export_subset$finish_time_utc[[nrow(export_subset)-1]])
+    print(export_subset$finish_time_utc[[nrow(export_subset)]])
+    print(export_subset)
     write_sheet(data = export_subset,
                 ss=workbook_id,sheet='bottle_start')
     # indicate submission was recorded

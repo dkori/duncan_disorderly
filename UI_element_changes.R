@@ -9,6 +9,25 @@ finish_choice_dict<-list("choice_names"=list(),
                          "choice_values"=list())
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
+# create a timeslide function since all timer slides will have same parameters
+timeslide<-function(id,label){
+  # function to generate values
+  timeslide_values<-function(){
+    val = force_tz(with_tz(Sys.time(),'America/New_York'),'UTC')
+    min=val-hours(12)
+    max=val+hours(12)
+    return(list("min"=min,"max"=max,"val"=val))
+  }
+  return(sliderInput(id,label,min=timeslide_values()$min,
+                     max=timeslide_values()$max,
+                     value=timeslide_values()$val,
+                     step=minutes(5),
+                     timeFormat='%d %b %H:%M',
+                     timezone='America/New_York'))
+  
+}
+# create a function to generate time input slide range
+
 
 ui_mods<-list(
   ## LEVEL 1: selecting if input is for baby or mom
@@ -42,7 +61,8 @@ ui_mods<-list(
     'remove' = c("#diaper","#feed"),
     'add' = list(
       # diaper change time
-      "diaper_time" = timeInput("diaper_time","Time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      #"diaper_time" = timeInput("diaper_time","Time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "diaper_time" = timeslide("diaper_time", "Time:"),
       # diaper contents
       "contents" = radioButtons(inputId="contents",
                    label="contents",
@@ -78,8 +98,10 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       # diaper change time
-      "breast_start" = timeInput("breast_start","Breastfeed start time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
-      "breast_end" = timeInput("breast_end","Breastfeed end time:",value = with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      #"breast_start" = timeInput("breast_start","Breastfeed start time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "breast_start" = timeslide("breast_start", "Breastfeed start time:"),
+      #"breast_end" = timeInput("breast_end","Breastfeed end time:",value = with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "breast_end" = timeslide("breast_end","Breastfeed end time:"),
       #todo: if useful later, add functionality to log each breast separately
       # bools for diaper rash, pee on clothes, butt paste, blowout
       "nipple_shield" = checkboxInput("nipple_shield","Only fed through nipple shield?"),
@@ -92,12 +114,13 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       # diaper change time
-      "bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:",
-                                      value=with_tz(Sys.time(),tz='America/New_York'),seconds=FALSE),
+      #"bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:", value=with_tz(Sys.time(),tz='America/New_York'),seconds=FALSE),
+      "bottle_start_time" = timeslide("bottle_start_time","Time bottle removed from fridge:"),
       "start_volume" = sliderInput("start_volume","Bottle Volume (fl. oz)",
                                    min=0.0,max=4.0,value=2.5,step=.5),
       "delayed_feed" = checkboxInput("delayed_feed","Delayed start (fell asleep before bottle ready etc.)"),
-      "finished_bottle" = checkboxInput("finished_bottle", "Finished bottle?") # going to add timer input for finish time in app directly since its just a one-off
+      "finished_bottle" = checkboxInput("finished_bottle", "Finished bottle?"),
+      "finish_start_time" = timeslide("finish_start_time","Time Finished?")
     ),
     'add_location' = "beforeBegin"
   ),
@@ -105,14 +128,16 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       #note: option to select previous feed defined in server function
-      "finish_time" = timeInput("finish_time","Time bottle finished:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE)
+      #"finish_time" = timeInput("finish_time","Time bottle finished:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE)
+      "finish_time" = timeslide("finish_time","Time bottle finished:")
     ),
     'add_location' = "beforeBegin"
   ),
   "pump"=list(
     'remove' = c("#pump","#medicine"),
     'add' = list(
-      "pump_time" = timeInput("pump_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      #"pump_time" = timeInput("pump_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "pump_time" = timeslide("pump_time","Time started:"),
       "pump_volume" = sliderInput("pump_volume","Volume pumped (fl. oz)",
                                   min=0.0,max=8.0,value=4,step=.5)
     ),
@@ -121,7 +146,8 @@ ui_mods<-list(
   "medicine"=list(
     'remove' = c("#pump","#medicine"),
     'add' = list(
-      "medicine_time" = timeInput("medicine_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      #"medicine_time" = timeInput("medicine_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "medicine_time" = timeslide("medicine_time", "Time taken:"),
       "medicine_type" = selectInput("medicine_type","medicine_type",choices=medicines)
     ),
     'add_location' = "beforeBegin"
@@ -160,6 +186,13 @@ submit_info<-function(button_id, mod_dict,input,workbook_id){
   to_add = mod_dict[[button_id]][['add']]
   # create data frame from added input elements
   inputs_list = lapply(names(to_add),function(x) input[[x]])
+  # force timezone to UTC for any date elements
+  for(n in names(inputs_list)){
+    entry=inputs_list[[n]]
+    if(any(class(entry)=="POSIXct")){
+      inputs_list[[n]]<-force_tz(entry,'UTC')
+    }
+  }
   responses = data.frame(inputs_list)
   names(responses)<-names(to_add)
   sheet_append(data=tibble(responses),
