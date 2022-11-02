@@ -5,9 +5,9 @@ account: dkori
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 7480227
-bundleId: 6461788
+bundleId: 6465291
 url: https://dkori.shinyapps.io/duncan_disorderly/
-when: 1667272135.99099
-lastSyncTime: 1667272135.991
+when: 1667351614.3982
+lastSyncTime: 1667351614.39821
 asMultiple: FALSE
 asStatic: FALSE

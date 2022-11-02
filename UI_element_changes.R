@@ -1,22 +1,39 @@
 # create a list of lists indicating UI elements to add/remove, will be consumed by a function called in each observer function
 # create an empty list storing "choice_names" and "choice_values" for bottle_finish radio_buttons
+library(icons)
+# define action button style globally since I'm still playing with it
+action_button_style = "font-size:40px;"
+
+flaticon<-icons::icon_set("flaticon/")
 finish_choice_dict<-list("choice_names"=list(),
                          "choice_values"=list())
+#define medicine dropdown options
+medicines<-c("Lobetolol","Procardia")
+
 ui_mods<-list(
   ## LEVEL 1: selecting if input is for baby or mom
   "baby"=list(
     'remove' = c("#baby","#mom"),
     'add' = list(
-      "diaper" = actionButton("diaper","diaper",icon=icon('poo')),
-      "feed" = actionButton("feed","feed",icon=icon('wheat-awn-circle-exclamation'))
+      "diaper" = actionButton("diaper","diaper", icon=NULL,width=NULL,
+                              img(flaticon$"baby-diaper"),
+                              style=action_button_style),
+      "feed" = actionButton("feed","feed",icon=NULL,width=NULL,
+                            img(flaticon$"feed"),
+                            style=action_button_style)
     ),
     'add_location' = "beforeBegin"
   ),
   "mom"=list(
     'remove' = c("#baby","#mom"),
     'add' = list(
-      "pump" = actionButton("pump","pump"),
-      "medication" = actionButton("medication","medication")
+      "pump" = actionButton("pump","pump",icon=NULL,width=NULL,
+                            img(flaticon$"breast-pump"),
+                            style=action_button_style),
+      "medication" = actionButton("medicine","medicine",icon=NULL,width=NULL,
+                                  img(flaticon$"medicine",
+                                      style="height:1em;position:relative;display:inline-block;top:.1em;"),
+                                  style=action_button_style)
     ),
     'add_location' = "beforeBegin"
   ),
@@ -42,9 +59,17 @@ ui_mods<-list(
   "feed"=list(
     'remove' = c("#diaper","#feed"),
     'add' = list(
-      'breastfeed' = actionButton('breastfeed','breastfeed',icon=icon('person-breastfeeding')),
-      'bottle_start' = actionButton('bottle_start','started bottle',icon=icon('bottle-droplet')),
-      'bottle_finish' = actionButton('bottle_finish','finished previously started bottle',icon=icon('bottle-droplet',class='light'))
+      'breastfeed' = actionButton('breastfeed','breastfeed',icon=NULL,width=NULL,
+                                  img(flaticon$"breastfeeding"),
+                                  style=action_button_style),
+      'bottle_start' = actionButton('bottle_start','started bottle',icon=NULL,width=NULL,
+                                    img(flaticon$"bottle-full"),
+                                    style=action_button_style),
+      'bottle_finish' = actionButton('bottle_finish',
+                                     'finished bottle',icon=NULL,width=NULL,
+                                     img(flaticon$"bottle-empty",
+                                         style="height:1em;position:relative;display:inline-block;top:.1em;"),
+                                     style=action_button_style)
     ),
     'add_location' = "beforeBegin"
   ),
@@ -67,8 +92,10 @@ ui_mods<-list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
       # diaper change time
-      "bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:",value=with_tz(Sys.time(),tz='America/New York'),seconds=FALSE),
-      "start_volume" = sliderInput("start_volume","Bottle Volume (fl. oz)",min=0.0,max=4.0,value=2.5,step=.5),
+      "bottle_start_time" = timeInput("bottle_start_time","Time bottle removed from fridge:",
+                                      value=with_tz(Sys.time(),tz='America/New_York'),seconds=FALSE),
+      "start_volume" = sliderInput("start_volume","Bottle Volume (fl. oz)",
+                                   min=0.0,max=4.0,value=2.5,step=.5),
       "delayed_feed" = checkboxInput("delayed_feed","Delayed start (fell asleep before bottle ready etc.)"),
       "finished_bottle" = checkboxInput("finished_bottle", "Finished bottle?") # going to add timer input for finish time in app directly since its just a one-off
     ),
@@ -77,16 +104,28 @@ ui_mods<-list(
   "bottle_finish"=list(
     'remove' = c("#breastfeed","#bottle_start","#bottle_finish"),
     'add' = list(
-      # diaper change time
-      # "previous_bottle" = radioButtons('previous_bottle','select unfinished bottle',
-      #                                  # need to define choices based on previously logged bottles that weren't finished
-      #                                  finish_choice_dict[['choice_names']],
-      #                                  finish_choice_dict[['choice_values']]),
+      #note: option to select previous feed defined in server function
       "finish_time" = timeInput("finish_time","Time bottle finished:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE)
     ),
     'add_location' = "beforeBegin"
+  ),
+  "pump"=list(
+    'remove' = c("#pump","#medicine"),
+    'add' = list(
+      "pump_time" = timeInput("pump_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "pump_volume" = sliderInput("pump_volume","Volume pumped (fl. oz)",
+                                  min=0.0,max=8.0,value=4,step=.5)
+    ),
+    'add_location' = "beforeBegin"
+  ),
+  "medicine"=list(
+    'remove' = c("#pump","#medicine"),
+    'add' = list(
+      "medicine_time" = timeInput("medicine_time","Time started:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
+      "medicine_type" = selectInput("medicine_type","medicine_type",choices=medicines)
+    ),
+    'add_location' = "beforeBegin"
   )
-  # LEVEL 2B: Pump and Medication for Mom
   )
 # define function that gets called on an item in ui_mods within the appropriate observer
 modify_ui<-function(button_id,mod_dict,submit=TRUE){
@@ -123,11 +162,6 @@ submit_info<-function(button_id, mod_dict,input,workbook_id){
   inputs_list = lapply(names(to_add),function(x) input[[x]])
   responses = data.frame(inputs_list)
   names(responses)<-names(to_add)
-  print(class(responses))
-  for(x in names(responses)){
-    print(x)
-    print(class(responses[,x]))
-  }
   sheet_append(data=tibble(responses),
                ss = workbook_id,
                sheet=button_id)
