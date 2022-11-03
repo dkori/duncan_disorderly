@@ -10,12 +10,12 @@ finish_choice_dict<-list("choice_names"=list(),
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
 # create a timeslide function since all timer slides will have same parameters
-timeslide<-function(id,label){
+timeslide<-function(id,label,step=5){
   # function to generate values
-  timeslide_values<-function(){
+  timeslide_values<-function(step=step){
     val = force_tz(with_tz(Sys.time(),'America/New_York'),'UTC')
-    min=val-hours(12)
-    max=val+hours(12)
+    min=val-hours(8)
+    max=val+minutes(5)
     return(list("min"=min,"max"=max,"val"=val))
   }
   return(sliderInput(id,label,min=timeslide_values()$min,
@@ -99,9 +99,9 @@ ui_mods<-list(
     'add' = list(
       # diaper change time
       #"breast_start" = timeInput("breast_start","Breastfeed start time:",value=with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
-      "breast_start" = timeslide("breast_start", "Breastfeed start time:"),
+      "breast_start" = timeslide("breast_start", "Breastfeed start time:",step=1),
       #"breast_end" = timeInput("breast_end","Breastfeed end time:",value = with_tz(Sys.time(),"America/New_York"),seconds=FALSE),
-      "breast_end" = timeslide("breast_end","Breastfeed end time:"),
+      "breast_end" = timeslide("breast_end","Breastfeed end time:",step=1),
       #todo: if useful later, add functionality to log each breast separately
       # bools for diaper rash, pee on clothes, butt paste, blowout
       "nipple_shield" = checkboxInput("nipple_shield","Only fed through nipple shield?"),
