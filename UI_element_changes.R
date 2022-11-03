@@ -71,8 +71,9 @@ ui_mods<-list(
       # bools for diaper rash, pee on clothes, butt paste, blowout
       "rash" = checkboxInput("rash","Diaper Rash present?"),
       "butt_paste" = checkboxInput("butt_paste","Butt Paste applied?"),
-      "clothes_pee" = checkboxInput("clothes_pee","Peed on clothes?"),
-      "blowout" = checkboxInput("blowout","blowout")
+      "uric_crystals" = checkboxInput("uric_crystals","Orange Crystals?")
+      #"clothes_pee" = checkboxInput("clothes_pee","Peed on clothes?"),
+      #"blowout" = checkboxInput("blowout","blowout")
                ),
     'add_location' = "beforeBegin"
   ),

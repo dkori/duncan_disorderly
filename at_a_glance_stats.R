@@ -31,19 +31,16 @@ gen_at_a_glance<-function(current_records){
                                 TRUE~''),
            paste_str = case_when(`Butt Paste`~'butt paste applied, ',
                                  TRUE~''),
-           pee_clothes_str = case_when(`Pee On Clothes?`~'peed on clothes, ',
-                                       TRUE~''),
-           blowout_str = case_when(`Blowout`~'had blowout, ',
-                                   TRUE~''))%>%
-    mutate(descriptive = paste0('<span style="font-weight:bold">lastest diaper change: </span>',
+           uric_str = case_when(`Uric Crystals`~'uric crystals (dehydrated), ',
+                                       TRUE~''))%>%
+    mutate(descriptive = paste0('<span style="font-weight:bold">Last diaper change: </span>',
                                 as.character(start_time,format='%d %b at %H:%M',tz='EDT'),
-                                ', ',contents_str, rash_str, paste_str, pee_clothes_str,
-                                pee_clothes_str, blowout_str))%>%
+                                ', ',contents_str, rash_str, paste_str, uric_str))%>%
     slice(1)%>%
     select(descriptive)%>%
     unlist()
   unfinished_bottle_frame<-current_records$feed_records%>%
-    mutate(descriptive = paste0('<span style="font-weight:bold">latest unfinished feed:</span>', 
+    mutate(descriptive = paste0('<span style="font-weight:bold">Latest unfinished bottle:</span>', 
                                 start_volume,'fl. oz., ','Started on ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                 as.POSIXct(start_time,

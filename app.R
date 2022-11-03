@@ -57,7 +57,7 @@ options(
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
-workbook_id <- drive_get("baby-log-test3")$id
+workbook_id <- drive_get("baby-log-test4")$id
 
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
@@ -65,7 +65,7 @@ medicines<-c("Lobetolol","Procardia")
 # Define shiny UI
 ui <- fluidPage(
   tabBox(title=NULL,width=12,id='tabs',
-         tabPanel("Record info",class="active",
+         tabPanel("New Record",class="active",
                   actionButton("baby","baby",icon=NULL,width=NULL,
                                img(flaticon$"baby"),
                                style=action_button_style),
@@ -91,11 +91,13 @@ ui <- fluidPage(
                            icon='poop',
                            color="orange")
                   ),
-         tabPanel(title='All Records',
+         tabPanel(title='Raw Records',
+                  selectInput('select_raw','Raw records for:',
+                              choices = c("Diaper Records" = "diaper_records",
+                                          "Bottle Feed Records" = "feed_records",
+                                          "Pump Records" = "pump_records")),
                   #textOutput("Diaper Records:"),
-                  dataTableOutput('diaper_records'),
-                  #textOutput("Feed Records:"),
-                  dataTableOutput('feed_records')
+                  dataTableOutput('chosen_raw'),
                   ))
 )
 
@@ -110,7 +112,7 @@ server <- function(input, output, session) {
   current_records[['diaper_records']]<-read_sheet(workbook_id,"diaper")%>%
     mutate(start_time = as.POSIXct(`Time (UTC)`,tz='EDT'))%>%
     arrange(desc(start_time))%>%
-    select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Pee On Clothes?`,`Blowout`)
+    select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Uric Crystals`)
   current_records[['feed_records']]<-read_sheet(workbook_id,"bottle_start")%>%
     #mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
     arrange(desc(start_time))%>%
@@ -119,7 +121,8 @@ server <- function(input, output, session) {
   print(current_records[['feed_records']][1,])
   current_records[['pump_records']]<-read_sheet(workbook_id,"pump")%>%
     arrange(desc(start_time))
-  
+  # assign chosen current record to raw_records display
+  output$chosen_raw<-renderDataTable({current_records[[input$select_raw]]})
   # call function to generate at_a_glance data
   at_a_glance_data<-gen_at_a_glance(current_records)
   output$latest<-renderText({at_a_glance_data$latest})
