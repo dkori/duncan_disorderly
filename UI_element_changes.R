@@ -120,6 +120,7 @@ ui_mods<-list(
       "start_volume" = sliderInput("start_volume","Bottle Volume (fl. oz)",
                                    min=0.0,max=4.0,value=2.5,step=.5),
       "delayed_feed" = checkboxInput("delayed_feed","Delayed start (fell asleep before bottle ready etc.)"),
+      "vitamin_d" = checkboxInput("vitamin_d","Added Vitamin D Drop"),
       "finished_bottle" = checkboxInput("finished_bottle", "Finished bottle?"),
       "finish_start_time" = timeslide("finish_start_time","Time Finished?")
     ),

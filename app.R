@@ -19,6 +19,7 @@ library(lubridate)
 library(icons)
 library(shinyjs)
 library(shinydashboard)
+library(shinythemes)
 valueBox <- function(value, subtitle, icon, color) {
   div(class = "col-lg-3 col-md-6",
       div(class = "panel panel-primary",
@@ -57,13 +58,14 @@ options(
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
-workbook_id <- drive_get("baby-log-test4")$id
+workbook_id <- drive_get("baby-log-test5")$id
 
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
 
 # Define shiny UI
 ui <- fluidPage(
+  uiOutput('myUI'),
   tabBox(title=NULL,width=12,id='tabs',
          tabPanel("New Record",class="active",
                   actionButton("baby","baby",icon=NULL,width=NULL,
@@ -72,7 +74,7 @@ ui <- fluidPage(
                   actionButton("mom","mom",icon=NULL,width=NULL,
                                img(flaticon$mother),
                                style=action_button_style),
-                  actionButton("refresh", "Refresh")),
+                  actionButton("refresh", "Start Over")),
          tabPanel(title="At a Glance",
                   htmlOutput("latest"),
                   selectInput('total_range','Totals over:',
@@ -99,10 +101,26 @@ ui <- fluidPage(
                   #textOutput("Diaper Records:"),
                   dataTableOutput('chosen_raw'),
                   ))
+  
 )
 
 # Define shiny server
 server <- function(input, output, session) {
+  # allow user to modify theme based on url param
+  output$myUI<-renderUI({
+    query <- parseQueryString(session$clientData$url_search)
+    if (!is.null(query[['theme']])) {
+      chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
+                          href = shinytheme(query[['theme']])))
+      
+    }else{
+      chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
+                          href = shinytheme('cerulean')))
+    }
+    return(chosen_theme)
+  })
+
+  # add refresh button
   observeEvent(input$refresh,{
     session$reload()
   })
@@ -110,15 +128,16 @@ server <- function(input, output, session) {
   # read in diaper and feed records
   current_records<-list()
   current_records[['diaper_records']]<-read_sheet(workbook_id,"diaper")%>%
-    mutate(start_time = as.POSIXct(`Time (UTC)`,tz='EDT'))%>%
+    mutate(start_time = as.POSIXct(`Time (UTC)`,tz='America/New_York'))%>%
     arrange(desc(start_time))%>%
     select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Uric Crystals`)
   current_records[['feed_records']]<-read_sheet(workbook_id,"bottle_start")%>%
+    # clear finish time if bottle is unfinished
+    mutate(finish_time = case_when(finished_bottle==TRUE~finish_time,
+                                   TRUE~as.POSIXct(NA)))%>%
     #mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
     arrange(desc(start_time))%>%
-    select(start_time,start_volume,delayed_feed,finished_bottle,finish_time_utc)
-  print("feed records first row")
-  print(current_records[['feed_records']][1,])
+    select(start_time,start_volume,delayed_feed,vitamin_d_drop, finished_bottle,finish_time)
   current_records[['pump_records']]<-read_sheet(workbook_id,"pump")%>%
     arrange(desc(start_time))
   # assign chosen current record to raw_records display
@@ -203,7 +222,6 @@ server <- function(input, output, session) {
       removeUI('#finish_start_time-label')
       removeUI('.shiny-input-container:has(>#finish_start_time)')
     }else{
-      print(input$finished_bottle)
       insertUI('#finished_bottle','beforeBegin',
                #timeInput("finish_time", "Time Finished?", value=with_tz(Sys.time(),tzone="America/New_York"))
                timeslide("finish_start_time","Time Finished?"))
@@ -221,7 +239,7 @@ server <- function(input, output, session) {
         mutate(descriptive = paste0(start_volume,'fl. oz.\n','Started at ',
                                     #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                     as.POSIXct(start_time,
-                                               tz="UTC")%>%as.character(format='%d %b %H:%M',tz='EDT'),'\n'))%>%
+                                               tz="UTC")%>%as.character(format='%d %b %H:%M',tz='America/New_York'),'\n'))%>%
         select(descriptive)
       choice_values = unfinished_bottles$start_time
       names(choice_values)<-choice_names$descriptive
@@ -250,14 +268,13 @@ server <- function(input, output, session) {
     finish_time_reformatted<-with_tz(input$finish_time,'America/New_York')
     logged_bottles<-googlesheets4::read_sheet(ss=workbook_id, sheet="bottle_start")%>%
       as.data.frame()
-    print(logged_bottles$finish_time_utc[[1]])
     # reformat input for bool
     prev_bottle_reformatted = as.character(as.POSIXct(input$previous_bottle,tz='UTC'))
     # already read in bottle log in observer for bottle_finish, correct selected record to finish and re-write sheet
     # remove the update row from logged_bottles
     stay_same = logged_bottles%>%
       filter(as.character(start_time)!=prev_bottle_reformatted)%>%
-      mutate(finish_time_utc = as.POSIXlt(finish_time_utc))
+      mutate(finish_time = as.POSIXlt(finish_time))
     to_update = logged_bottles%>%
       filter(as.character(start_time)==prev_bottle_reformatted)
     updated<-data.frame("start_time"=to_update$start_time,
@@ -265,12 +282,8 @@ server <- function(input, output, session) {
                         delayed_feed = to_update$delayed_feed,
                         finished_bottle = TRUE,
                         # forcing timezone to UTC since sheet will always assume UTC, even though actual recorded time will be EDT
-                        finish_time_utc = force_tz(input$finish_time,'UTC'))
-    print(stay_same$finish_time_utc[[1]])
-    print(updated$finish_time_utc[[1]])
+                        finish_time = force_tz(input$finish_time,'UTC'))
     export_subset<-bind_rows(stay_same,updated)
-    print(export_subset$finish_time_utc[[nrow(export_subset)-1]])
-    print(export_subset$finish_time_utc[[nrow(export_subset)]])
     print(export_subset)
     write_sheet(data = export_subset,
                 ss=workbook_id,sheet='bottle_start')

@@ -13,16 +13,26 @@ gen_at_a_glance<-function(current_records){
 
   # create a vector of latest values that will be rendered as text
   latest_full_feed <- current_records$feed_records%>%
-    filter(finished_bottle==TRUE)%>%
-    mutate(descriptive = paste0('<span style="font-weight:bold">latest full feed: </span>', 
-                                start_volume,'fl. oz., ','Started at ',
+    mutate(descriptive = paste0('<span style="font-weight:bold">Latest full feed: </span>', 
+                                start_volume,'fl. oz., ','Started on ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                 start_time%>%as.character(format='%d %b at %H:%M'),
-                                '. Finished at ',
-                                finish_time_utc%>%as.character(format='%d %b at %H:%M',tz='EDT')))%>%
+                                '. Finished on ',
+                                finish_time%>%as.character(format='%d %b at %H:%M',tz='America/New_York')))%>%
+    filter(finished_bottle==TRUE)%>%
     select(descriptive)%>%
     slice(1)%>%
     unlist()
+  # find the last vitamin d drop
+  last_d<- current_records$feed_records%>%
+    mutate(descriptive = paste0('<span style="font-weight:bold">Last Vitamin D drop in: </span>',
+                                start_volume, 'fl. oz. bottle started on ',
+                                start_time%>%as.character(format='%d %b at %H:%M')))%>%
+    filter(vitamin_d_drop==TRUE)%>%
+    select(descriptive)%>%
+    slice(1)%>%
+    unlist()
+    
   latest_diaper_change<- current_records$diaper_records%>%
     # make strings of all bool variables
     mutate(contents_str = case_when(Contents=='both'~'pee and poop, ',
@@ -34,12 +44,13 @@ gen_at_a_glance<-function(current_records){
            uric_str = case_when(`Uric Crystals`~'uric crystals (dehydrated), ',
                                        TRUE~''))%>%
     mutate(descriptive = paste0('<span style="font-weight:bold">Last diaper change: </span>',
-                                as.character(start_time,format='%d %b at %H:%M',tz='EDT'),
+                                as.character(start_time,format='%d %b at %H:%M',tz='America/New_York'),
                                 ', ',contents_str, rash_str, paste_str, uric_str))%>%
     slice(1)%>%
     select(descriptive)%>%
     unlist()
   unfinished_bottle_frame<-current_records$feed_records%>%
+    # add a string indicating if vitamin d drop was finished
     mutate(descriptive = paste0('<span style="font-weight:bold">Latest unfinished bottle:</span>', 
                                 start_volume,'fl. oz., ','Started on ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
@@ -62,7 +73,7 @@ gen_at_a_glance<-function(current_records){
     unlist()
   # create a string with latest info that will be rendered as text
   latest_str = paste0('<span style="font-weight:bold">Latest entries:</span><br>',
-                      vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change,latest_pump)))
+                      vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change,latest_pump,last_d)))
   result_list = list("latest"=latest_str)
   return(result_list)
 }
