@@ -1,5 +1,10 @@
 #todo: add javascript to display times in client timezone following method described here https://stackoverflow.com/questions/24842229/how-to-retrieve-the-clients-current-time-and-time-zone-when-using-shiny
 
+########################################## CURRENT TIME ZONE LOGIC##################
+# Google sheet only records time in UTC, but I want to be able to look at the raw sheet and see eastern time, so for now: 
+## 1. all inputs should be anchored to current time in eastern time
+## 2. input times are then forced to UTC before writing to google sheets
+## 3.) times in sheets that are read in are then forced back to eastern time
 #todo: add links to the following at bottom of page
 #<a href="https://www.flaticon.com/free-icons/mother" title="mother icons">Mother icons created by Freepik - Flaticon</a>
 # <a href="https://www.flaticon.com/free-icons/infant" title="infant icons">Infant icons created by Freepik - Flaticon</a>
@@ -58,7 +63,7 @@ options(
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
-workbook_id <- drive_get("baby-log-test5")$id
+workbook_id <- drive_get("baby-log-test6")$id
 
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
@@ -128,10 +133,14 @@ server <- function(input, output, session) {
   # read in diaper and feed records
   current_records<-list()
   current_records[['diaper_records']]<-read_sheet(workbook_id,"diaper")%>%
-    mutate(start_time = as.POSIXct(`Time (UTC)`,tz='America/New_York'))%>%
+    # google sheet should indicate eastern time even though it is stored in UTC, so force tz
+    mutate(start_time = force_tz(`Time`,tz='America/New_York'))%>%
     arrange(desc(start_time))%>%
     select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Uric Crystals`)
+  
   current_records[['feed_records']]<-read_sheet(workbook_id,"bottle_start")%>%
+    mutate(finish_time = force_tz(finish_time,'America/New_York'),
+           start_time = force_tz(start_time, 'America/New_York'))%>%
     # clear finish time if bottle is unfinished
     mutate(finish_time = case_when(finished_bottle==TRUE~finish_time,
                                    TRUE~as.POSIXct(NA)))%>%
@@ -139,7 +148,9 @@ server <- function(input, output, session) {
     arrange(desc(start_time))%>%
     select(start_time,start_volume,delayed_feed,vitamin_d_drop, finished_bottle,finish_time)
   current_records[['pump_records']]<-read_sheet(workbook_id,"pump")%>%
+    mutate(start_time = force_tz(start_time, 'America/New_York'))%>%
     arrange(desc(start_time))
+  
   # assign chosen current record to raw_records display
   output$chosen_raw<-renderDataTable({current_records[[input$select_raw]]})
   # call function to generate at_a_glance data
@@ -238,8 +249,7 @@ server <- function(input, output, session) {
       choice_names = unfinished_bottles%>%
         mutate(descriptive = paste0(start_volume,'fl. oz.\n','Started at ',
                                     #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
-                                    as.POSIXct(start_time,
-                                               tz="UTC")%>%as.character(format='%d %b %H:%M',tz='America/New_York'),'\n'))%>%
+                                    force_tz(as.POSIXct(start_time),'America/New_York')%>%as.character(format='%d %b %H:%M',tz='America/New_York'),'\n'))%>%
         select(descriptive)
       choice_values = unfinished_bottles$start_time
       names(choice_values)<-choice_names$descriptive
@@ -265,7 +275,6 @@ server <- function(input, output, session) {
     submit_info("bottle_start",ui_mods,input,workbook_id)
   })
   observeEvent(input$submit_bottle_finish,{
-    finish_time_reformatted<-with_tz(input$finish_time,'America/New_York')
     logged_bottles<-googlesheets4::read_sheet(ss=workbook_id, sheet="bottle_start")%>%
       as.data.frame()
     # reformat input for bool
@@ -280,6 +289,7 @@ server <- function(input, output, session) {
     updated<-data.frame("start_time"=to_update$start_time,
                         start_volume = to_update$start_volume,
                         delayed_feed = to_update$delayed_feed,
+                        vitamin_d_drop = to_update$vitamin_d_drop,
                         finished_bottle = TRUE,
                         # forcing timezone to UTC since sheet will always assume UTC, even though actual recorded time will be EDT
                         finish_time = force_tz(input$finish_time,'UTC'))
