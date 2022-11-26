@@ -1,3 +1,17 @@
+
+library(shiny)
+library(googledrive)
+library(googlesheets4)
+library(shinyTime)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(icons)
+library(shinyjs)
+library(shinydashboard)
+library(shinythemes)
+library(plotly)
+library(viridis)
 #todo: add javascript to display times in client timezone following method described here https://stackoverflow.com/questions/24842229/how-to-retrieve-the-clients-current-time-and-time-zone-when-using-shiny
 
 ########################################## CURRENT TIME ZONE LOGIC##################
@@ -13,18 +27,6 @@
 #<a href="https://www.flaticon.com/free-icons/infant" title="infant icons">Infant icons created by Freepik - Flaticon</a>
 
 # Load packages
-library(shiny)
-library(shinysurveys)
-library(googledrive)
-library(googlesheets4)
-library(shinyTime)
-library(tidyr)
-library(dplyr)
-library(lubridate)
-library(icons)
-library(shinyjs)
-library(shinydashboard)
-library(shinythemes)
 valueBox <- function(value, subtitle, icon, color) {
   div(class = "col-lg-3 col-md-6",
       div(class = "panel panel-primary",
@@ -52,6 +54,8 @@ flaticon<-icons::icon_set("flaticon/")
 # read in function/dictionary to modify UI
 source('UI_element_changes.R')
 source('at_a_glance_stats.R')
+source('trends_tab_functions.R')
+source('retrieve_current_records.R')
 # define action button style globally since I'm still playing with it
 action_button_style = "font-size:40px;"
 options(
@@ -70,9 +74,11 @@ medicines<-c("Lobetolol","Procardia")
 
 # Define shiny UI
 ui <- fluidPage(
-  uiOutput('myUI'),
-  tabBox(title=NULL,width=12,id='tabs',
-         tabPanel("New Record",class="active",
+  theme=shinytheme('superhero'),
+#  uiOutput('myUI'),
+  tabsetPanel(id='nav',#title='Duncan',#title=NULL,width=12,id='tabs',
+             selected='New Record',#collapsible=F,
+             tabPanel("New Record",class="active",
                   actionButton("baby","baby",icon=NULL,width=NULL,
                                img(flaticon$"baby"),
                                style=action_button_style),
@@ -80,152 +86,167 @@ ui <- fluidPage(
                                img(flaticon$mother),
                                style=action_button_style),
                   actionButton("refresh", "Start Over")),
-         tabPanel(title="At a Glance",
+             tabPanel(title="At a Glance",
                   htmlOutput("latest"),
                   selectInput('total_range','Totals over:',
                               choices = c("Last 24 Hrs" = "last_day",
-                                          "Last 7 days" = "last_week")),
-                  valueBox("amount_fed",
-                           subtitle="Fl. oz. breast-milk consumed",
+                                          "Last 7 days" = "last_week"),
+                              selected = "last_day"),
+                  valueBox("amount_fed_num",
+                           subtitle=textOutput("fed_caption"),
                            icon='person-breastfeeding',
                            color="blue"),
-                  valueBox("amount_pumped",
+                  valueBox("amount_pumped_num",
                            subtitle="Fl. oz. breast-milk pumped",
                            icon='pump-medical',
                            color="green"),
-                  valueBox("poop_diapers",
+                  valueBox("poop_diapers_num",
                            subtitle="Poop diapers",
                            icon='poop',
-                           color="orange")
+                           color="orange")                  
                   ),
-         tabPanel(title='Raw Records',
+             tabPanel(title="Trends",
+                      tabBox(tabPanel(title= 'Cumulative Pump vs Feed', class='active',
+                                      selectInput('baseline_pump','Choose baseline pump',
+                                                  choices=c()),
+                                      checkboxInput("feed_trend_curve",
+                                                    "Show feeding trend curve",
+                                                    value=FALSE),
+                                      plotlyOutput(outputId = "cumu_milk_plot")),
+                             tabPanel(title='Diaper Changes and Feeding',
+                                      plotOutput("feed_diaper_plot"))),
+                      
+             ),
+             tabPanel(title='Raw Records',
                   selectInput('select_raw','Raw records for:',
                               choices = c("Diaper Records" = "diaper_records",
                                           "Bottle Feed Records" = "feed_records",
                                           "Pump Records" = "pump_records")),
                   #textOutput("Diaper Records:"),
-                  dataTableOutput('chosen_raw'),
-                  ))
+                  dataTableOutput('chosen_raw')
+                  )
+         )
   
 )
 
 # Define shiny server
 server <- function(input, output, session) {
   # allow user to modify theme based on url param
-  output$myUI<-renderUI({
-    query <- parseQueryString(session$clientData$url_search)
-    if (!is.null(query[['theme']])) {
-      chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
-                          href = shinytheme(query[['theme']])))
-      
-    }else{
-      chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
-                          href = shinytheme('cerulean')))
-    }
-    return(chosen_theme)
-  })
+  # output$myUI<-renderUI({
+  #   query <- parseQueryString(session$clientData$url_search)
+  #   if (!is.null(query[['theme']])) {
+  #     chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
+  #                         href = shinytheme(query[['theme']])))
+  #     
+  #   }else{
+  #     chosen_theme<-tags$head(tags$link(rel = "stylesheet", type = "text/css", 
+  #                         href = shinytheme('superhero')))
+  #   }
+  #   return(chosen_theme)
+  # })
 
   # add refresh button
   observeEvent(input$refresh,{
     session$reload()
   })
-  # read in the current logged data
-  # read in diaper and feed records
-  current_records<-list()
-  current_records[['diaper_records']]<-read_sheet(workbook_id,"diaper")%>%
-    # google sheet should indicate eastern time even though it is stored in UTC, so force tz
-    mutate(start_time = force_tz(`Time`,tz='America/New_York'))%>%
-    arrange(desc(start_time))%>%
-    select(start_time,Contents,`Diaper Rash`,`Butt Paste`,`Uric Crystals`)
-  
-  current_records[['feed_records']]<-read_sheet(workbook_id,"bottle_start")%>%
-    mutate(finish_time = force_tz(finish_time,'America/New_York'),
-           start_time = force_tz(start_time, 'America/New_York'))%>%
-    # clear finish time if bottle is unfinished
-    mutate(finish_time = case_when(finished_bottle==TRUE~finish_time,
-                                   TRUE~as.POSIXct(NA)))%>%
-    #mutate(start_time = as.POSIXct(start_time_utc,tz='EDT'))%>%
-    arrange(desc(start_time))%>%
-    select(start_time,start_volume,delayed_feed,vitamin_d_drop, finished_bottle,finish_time)
-  current_records[['pump_records']]<-read_sheet(workbook_id,"pump")%>%
-    mutate(start_time = force_tz(start_time, 'America/New_York'))%>%
-    arrange(desc(start_time))
-  
+  # load current records from sheet
+  current_records<-retrieve_current(workbook_id)
+  ########################### ########################### ######################
+  ##################################TRENDS TAB #################################
+  ########################### ########################### ######################
+    # update the select input for baseline pump in trends tab
+  observeEvent(input$nav,{
+    pump_choice_vec<-gen_pump_options(current_records)
+    updateSelectInput(inputId = 'baseline_pump',
+                      label = "Select baseline pump for chart",
+                      choices = pump_choice_vec,
+                      selected = pump_choice_vec[[7]]
+                      )
+  })
+  # use pump records to create choices for 
+  ########################### CREATE PLOTS########################### 
+  # cumulative plot feed vs pump
+  output$cumu_milk_plot<-renderPlotly({
+    return(gen_feed_pump_step(current_records,input$baseline_pump,input$feed_trend_curve))
+  })
+  # plot showing diaper changes in relation to feeds
+  output$feed_diaper_plot<-renderPlot({
+    return(gen_diaper_feed(current_records))
+  })
+  ########################### ########################### ######################
+  ##################################Raw Records TAB #################################
+  ########################### ########################### ######################
   # assign chosen current record to raw_records display
   output$chosen_raw<-renderDataTable({current_records[[input$select_raw]]})
-  # call function to generate at_a_glance data
-  at_a_glance_data<-gen_at_a_glance(current_records)
-  output$latest<-renderText({at_a_glance_data$latest})
-  # insert unfinished bottle list
-  output$diaper_records<-renderDataTable({current_records$diaper_records})
-  output$feed_records<-renderDataTable({current_records$feed_records})
-  
+  ########################### ########################### ######################
+  ##################################At a Glance Tab #################################
+  ########################### ########################### ######################
+  # call function to generate at_a_glance values
   # dictionary for finding start date based on input$total_range
   start_dates<-list("last_day"=with_tz(Sys.time(),'America/New_York')-days(1),
                     "last_week"=with_tz(Sys.time(),'America/New_York')-days(7))
-  # create value boxes with recent stats
-  output$amount_fed<-reactive({
-    # select start date based on user range selection
-    start_date<-start_dates[[input$total_range]]
-    num<-current_records$feed_records%>%
-      filter(start_time>start_date)%>%
-      summarise(sum(start_volume))%>%
-      unlist()
-    as.numeric(num)
-    })
-                              
-  output$amount_pumped<-reactive({
-    # select start date based on user range selection
-    start_date<-start_dates[[input$total_range]]
-    num<-current_records$pump_records%>%
-      filter(start_time>start_date)%>%
-      summarise(sum(volume))%>%
-      unlist()
-    as.numeric(num)
-    })
-  
-  output$poop_diapers<-reactive({
-    # select start date based on user range selection
-    start_date<-start_dates[[input$total_range]]
-    num<-current_records$diaper_records%>%
-      filter(start_time>start_date)%>%
-      filter(grepl('both|poop',Contents,ignore.case=TRUE))%>%
-      nrow()
-    num
-    })
-
+  observeEvent(input$total_range,
+               {
+                 at_a_glance_data<-gen_at_a_glance(current_records,input$total_range,start_dates)
+                 # bulleted list of latest data
+                 output$latest<-renderText({at_a_glance_data$latest})
+                 # create value boxes with recent stats
+                 output$amount_fed_num<-reactive({at_a_glance_data$fed_num})
+                 output$amount_pumped_num<-reactive({at_a_glance_data$pump_num})
+                 output$poop_diapers_num<-reactive({at_a_glance_data$poop_diapers_num})
+                 output$fed_caption<-renderText({at_a_glance_data$feed_subtitle})
+                 }
+               )
   ## LEVEL 1 OBSERVERS: baby or mom
   observeEvent(input$baby,{
-    modify_ui(button_id = "baby",mod_dict=ui_mods,submit=FALSE)
+    modify_ui(button_id = "baby",
+              #mod_dict=ui_mods,
+              submit=FALSE)
   })
   observeEvent(input$mom,{
-    modify_ui(button_id = "mom", mod_dict=ui_mods,submit=FALSE)
+    modify_ui(button_id = "mom",
+              #mod_dict=ui_mods,
+              submit=FALSE)
   })
   ## LEVEL 2a OBSERVERS: diaper or feed
 
   observeEvent(input$diaper, {
     # add UI elements for diaper choices
-    modify_ui(button_id="diaper",mod_dict=ui_mods)
+    modify_ui(button_id="diaper",
+              #mod_dict=ui_mods
+              )
 
   })
   # observer to submit diaper content
   observeEvent(input$submit_diaper,{
-    submit_info("diaper",ui_mods,input,workbook_id)
+    submit_info("diaper",
+                #ui_mods,
+                input,workbook_id)
   })
   observeEvent(input$feed,{
-    modify_ui(button_id="feed",mod_dict=ui_mods,submit=FALSE)
+    modify_ui(button_id="feed",
+              #mod_dict=ui_mods,
+              submit=FALSE)
   })
   ## LEVEL 2B OBSERVERS: pump or medication
   observeEvent(input$mom,{
-    modify_ui(button_id="mom",mod_dict=ui_mods,submit=FALSE)
+    modify_ui(button_id="mom",
+              #mod_dict=ui_mods,
+              submit=FALSE)
   })
   ## LEVEL 3A OBSERVERS: feed options
   observeEvent(input$breastfeed,{
-    modify_ui(button_id="breastfeed",mod_dict=ui_mods)
+    modify_ui(button_id="breastfeed"#,mod_dict=ui_mods
+              )
   })
   # logic when user selects to start a bottle
   observeEvent(input$bottle_start,{
-    modify_ui(button_id="bottle_start",mod_dict=ui_mods)
+    modify_ui(button_id="bottle_start"#,mod_dict=ui_mods
+              )
+  })
+  observeEvent(input$formula,{
+    modify_ui(button_id='formula'#,mod_dict=ui_mods
+              )
   })
   # add an input for finish_time if finished_bottle is checked
   observeEvent(input$finished_bottle,{
@@ -253,7 +274,8 @@ server <- function(input, output, session) {
         select(descriptive)
       choice_values = unfinished_bottles$start_time
       names(choice_values)<-choice_names$descriptive
-      modify_ui(button_id="bottle_finish",mod_dict=ui_mods)
+      modify_ui(button_id="bottle_finish"#,mod_dict=ui_mods
+                )
       # add radio buttons to select which unfinished bottle should be updated to finished
       insertUI('#finish_time', 'beforeBegin',
                selectInput('previous_bottle','select unfinished bottle',
@@ -269,11 +291,22 @@ server <- function(input, output, session) {
   })
   # submit button observers for each of the above
   observeEvent(input$submit_breastfeed,{
-    submit_info("breastfeed",ui_mods,input,workbook_id)
+    submit_info("breastfeed",
+                #ui_mods,input,
+                workbook_id)
   })
   observeEvent(input$submit_bottle_start,{
-    submit_info("bottle_start",ui_mods,input,workbook_id)
+    submit_info("bottle_start",
+                #ui_mods,
+                input,
+                workbook_id)
   })
+  observeEvent(input$submit_formula,{
+    submit_info("formula",
+                #ui_mods,
+                input,workbook_id)
+  }
+               )
   observeEvent(input$submit_bottle_finish,{
     logged_bottles<-googlesheets4::read_sheet(ss=workbook_id, sheet="bottle_start")%>%
       as.data.frame()
@@ -304,16 +337,24 @@ server <- function(input, output, session) {
   })
   #LEVEL 3B Obervers: pump or medication
   observeEvent(input$pump,{
-    modify_ui(button_id= "pump", mod_dict = ui_mods)
+    modify_ui(button_id= "pump", 
+              #mod_dict = ui_mods
+              )
   })
   observeEvent(input$medicine,{
-    modify_ui(button_id = "medicine", mod_dict = ui_mods)
+    modify_ui(button_id = "medicine",
+              #mod_dict = ui_mods
+              )
   })
   observeEvent(input$submit_pump,{
-    submit_info("pump", mod_dict = ui_mods,input,workbook_id)
+    submit_info("pump", 
+                #mod_dict = ui_mods,
+                input,workbook_id)
   })
   observeEvent(input$submit_medicine,{
-    submit_info("medicine",mod_dict = ui_mods,input,workbook_id)
+    submit_info("medicine",
+                #mod_dict = ui_mods,
+                input,workbook_id)
   })
 }
 # Run the shiny application

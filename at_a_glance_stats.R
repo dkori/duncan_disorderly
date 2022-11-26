@@ -1,6 +1,6 @@
 # create a function that generates elements for at a glance page
 
-gen_at_a_glance<-function(current_records){
+gen_at_a_glance<-function(current_records,total_range,start_dates){
   # function used to create bulleted list from vector
   vectorBulletList <- function(vector) {
     if(length(vector > 1)) {
@@ -74,26 +74,42 @@ gen_at_a_glance<-function(current_records){
   # create a string with latest info that will be rendered as text
   latest_str = paste0('<span style="font-weight:bold">Latest entries:</span><br>',
                       vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change,latest_pump,last_d)))
-  result_list = list("latest"=latest_str)
-  return(result_list)
-}
-
-# create a function to create value box values
-gen_VB<-function(current_records,total_range){
   # generate the starting date ranges for each select input
   start_dates<-list("last_day"=with_tz(Sys.time(),'America/New_York')-days(1),
                     "last_week"=with_tz(Sys.time(),'America/New_York')-days(7))
+  total_range<-total_range
   # select start date based on user range selection
   start_date<-start_dates[[total_range]]
-  totals_for_vb<-list("amount_fed" = current_records$feed_records%>%
-                        filter(start_time_utc>start_date)%>%
-                        summarise(sum(start_volume))%>%
-                        unlist(),
-                      "amount_pumped" = current_records$pump_records%>%
-                        summarise(sum(volume))%>%
-                        unlist(),
-                      "poop_diapers" = current_records$diaper_records%>%
-                        filter(grepl('both|poop',Contents,ignore.case=TRUE))%>%
-                        nrow())
-  return(totals_for_vb)
+  # calculate each number for value boxes
+  fed_num<-current_records$feed_records%>%
+    filter(start_time>start_date)%>%
+    summarise(sum(start_volume))%>%
+    unlist()%>%as.numeric()
+  poop_diapers_num<-current_records$diaper_records%>%
+    filter(start_time>start_date)%>%
+    filter(grepl('both|poop',Contents,ignore.case=TRUE))%>%
+    nrow()%>%as.numeric()
+  pump_num<-current_records$pump_records%>%
+    filter(start_time>start_date)%>%
+    summarise(sum(volume))%>%
+    unlist()%>%as.numeric()
+  formula_subset<-
+    current_records$formula%>%
+    filter(start_time>start_date)
+  # add formula supplement to the subtitle for feeding if >0 in time selected
+  if(nrow(formula_subset)>0){
+    feed_subtitle<-paste0("Fl. oz. breast-milk consumed \n(plus ",
+                          sum(formula_subset$start_volume),
+                          "fl. oz. formula supplemented)")
+  }else{
+    feed_subtitle = "Fl. oz. breast-milk consumed"
+  }
+  result_list = list("latest"=latest_str,
+                     "fed_num"=fed_num,
+                     "poop_diapers_num"=poop_diapers_num,
+                     "pump_num"=pump_num,
+                     "feed_subtitle"=feed_subtitle)
+  return(result_list)
 }
+
+
