@@ -153,7 +153,9 @@ gen_diaper_feed<-function(current_records){
            scale_shape_manual(labels=c("bottle start/finish",
                                        "diaper change",
                                        "formula start/finish"),
-                              values=enc2utf8(c('\U0001F37C','\U0001F4A9','\U0001F9EA')))+
+                              values=enc2utf8(c('\U0001F37C','\U0001F4A9','\U0001F9EA'))
+                              #values =c('\uD83D\uDC18','\U1F4A9','\U1F9EA')
+                              )+
            geom_point(data = bind_rows(feed_points,formula_points),
                       aes(x=day,y=tod,color=start_volume),
                       alpha=.5,stroke=F)+

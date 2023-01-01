@@ -1,4 +1,4 @@
-
+print(enc2utf8('\U0001F4A9'))
 library(shiny)
 library(googledrive)
 library(googlesheets4)
@@ -7,7 +7,7 @@ library(tidyr)
 library(dplyr)
 library(lubridate)
 library(icons)
-library(shinyjs)
+#library(shinyjs)
 library(shinydashboard)
 library(shinythemes)
 library(plotly)
@@ -25,8 +25,23 @@ library(viridis)
 # <a href="https://www.flaticon.com/free-icons/baby-bottle" title="baby bottle icons">Baby bottle icons created by Freepik - Flaticon</a>
 # <a href="https://www.flaticon.com/free-icons/breastfeeding" title="breastfeeding icons">Breastfeeding icons created by Freepik - Flaticon</a>
 #<a href="https://www.flaticon.com/free-icons/infant" title="infant icons">Infant icons created by Freepik - Flaticon</a>
-
+library(gargle)
+library(here)
+options(
+  # whenever there is one account token found, use the cached token
+  gargle_oauth_email = TRUE,
+  # specify auth tokens should be stored in a hidden directory ".secrets"
+  gargle_oauth_cache = here::here(".secrets"),
+  gargle_verbosity = "debug"
+)
+#print("does gargle_oauth_cache match secrets?")
+#print(gargle::gargle_oauth_cache()==here::here(".secrets"))
 # Load packages
+drive_auth(
+  email=gargle::gargle_oauth_email(),
+  scopes="https://www.googleapis.com/auth/drive",
+  )
+gs4_auth(scopes="https://www.googleapis.com/auth/spreadsheets")
 valueBox <- function(value, subtitle, icon, color) {
   div(class = "col-lg-3 col-md-6",
       div(class = "panel panel-primary",
@@ -58,12 +73,7 @@ source('trends_tab_functions.R')
 source('retrieve_current_records.R')
 # define action button style globally since I'm still playing with it
 action_button_style = "font-size:40px;"
-options(
-  # whenever there is one account token found, use the cached token
-  gargle_oauth_email = TRUE,
-  # specify auth tokens should be stored in a hidden directory ".secrets"
-  gargle_oauth_cache = "duncan_disorderly/.secrets"
-)
+
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
