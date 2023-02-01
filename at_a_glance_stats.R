@@ -13,12 +13,15 @@ gen_at_a_glance<-function(current_records,total_range,start_dates){
 
   # create a vector of latest values that will be rendered as text
   latest_full_feed <- current_records$feed_records%>%
+    mutate(discarded = replace_na(discarded,0),
+           final_volume = start_volume-discarded)%>%
     mutate(descriptive = paste0('<span style="font-weight:bold">Latest full feed: </span>', 
                                 start_volume,'fl. oz., ','Started on ',
                                 #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                 start_time%>%as.character(format='%d %b at %H:%M'),
                                 '. Finished on ',
-                                finish_time%>%as.character(format='%d %b at %H:%M',tz='America/New_York')))%>%
+                                finish_time%>%as.character(format='%d %b at %H:%M',tz='America/New_York'),
+                                '. ',ifelse(is.na(start_fuss),"",start_fuss)))%>%
     filter(finished_bottle==TRUE)%>%
     select(descriptive)%>%
     slice(1)%>%
@@ -37,15 +40,16 @@ gen_at_a_glance<-function(current_records,total_range,start_dates){
     # make strings of all bool variables
     mutate(contents_str = case_when(Contents=='both'~'pee and poop, ',
                                     TRUE~paste0(Contents,', ')),
-           rash_str = case_when(`Diaper Rash`~'diaper rash, ',
-                                TRUE~''),
-           paste_str = case_when(`Butt Paste`~'butt paste applied, ',
-                                 TRUE~''),
-           uric_str = case_when(`Uric Crystals`~'uric crystals (dehydrated), ',
-                                       TRUE~''))%>%
+           # rash_str = case_when(`Diaper Rash`~'diaper rash, ',
+           #                      TRUE~''),
+           rash_str = paste0(paste(`Diaper Rash`,sep=', '),', '),
+           paste_str = paste0(paste(`Rash Avoidance`,sep=', '),', ')
+           # uric_str = case_when(`Uric Crystals`~'uric crystals (dehydrated), ',
+           #                             TRUE~'')
+           )%>%
     mutate(descriptive = paste0('<span style="font-weight:bold">Last diaper change: </span>',
                                 as.character(start_time,format='%d %b at %H:%M',tz='America/New_York'),
-                                ', ',contents_str, rash_str, paste_str, uric_str))%>%
+                                ', ',contents_str, rash_str, paste_str))%>%
     slice(1)%>%
     select(descriptive)%>%
     unlist()
@@ -76,13 +80,13 @@ gen_at_a_glance<-function(current_records,total_range,start_dates){
                       vectorBulletList(c(latest_full_feed,unfinished_str, latest_diaper_change,latest_pump,last_d)))
   # generate the starting date ranges for each select input
   start_dates<-list("last_day"=with_tz(Sys.time(),'America/New_York')-days(1),
-                    "last_week"=with_tz(Sys.time(),'America/New_York')-days(7))
-  total_range<-total_range
+                    "last_week"=with_tz(Sys.time(),'America/New_York')-days(7),
+                    "last_month"=with_tz(Sys.time(),'America/New_York')-months(1))
   # select start date based on user range selection
   start_date<-start_dates[[total_range]]
   # calculate each number for value boxes
   fed_num<-current_records$feed_records%>%
-    filter(start_time>start_date)%>%
+    filter(start_time>start_date & finished_bottle==TRUE)%>%
     summarise(sum(start_volume))%>%
     unlist()%>%as.numeric()
   poop_diapers_num<-current_records$diaper_records%>%

@@ -1,4 +1,3 @@
-print(enc2utf8('\U0001F4A9'))
 library(shiny)
 library(googledrive)
 library(googlesheets4)
@@ -77,7 +76,7 @@ action_button_style = "font-size:40px;"
 
 # Get the ID of the sheet for writing programmatically
 # This should be placed at the top of your shiny app
-workbook_id <- drive_get("baby-log-test6")$id
+workbook_id <- drive_get("baby_log_extended2")$id
 
 #define medicine dropdown options
 medicines<-c("Lobetolol","Procardia")
@@ -100,7 +99,8 @@ ui <- fluidPage(
                   htmlOutput("latest"),
                   selectInput('total_range','Totals over:',
                               choices = c("Last 24 Hrs" = "last_day",
-                                          "Last 7 days" = "last_week"),
+                                          "Last 7 days" = "last_week",
+                                          "Last Calendar Month" = "last_month"),
                               selected = "last_day"),
                   valueBox("amount_fed_num",
                            subtitle=textOutput("fed_caption"),
@@ -269,34 +269,55 @@ server <- function(input, output, session) {
                timeslide("finish_start_time","Time Finished?"))
     }
   })
-  observeEvent(input$bottle_finish,{
+  # when finish bottle is clicked, load unfinished bottles
+  unfinished<-eventReactive(input$bottle_finish,{
+    print('input$bottle_finish event triggered')
     # need to retrieve previously unfinished bottles from bottle sheet
     logged_bottles<-googlesheets4::read_sheet(ss=workbook_id, sheet="bottle_start")
     unfinished_bottles = logged_bottles[logged_bottles$finished_bottle==FALSE,]
-    if(nrow(unfinished_bottles)!=0){
-      
+    return(unfinished_bottles)
+  })
+  # once unfinished bottles are loaded, populate choice names and proceed to update UI
+  observeEvent(unfinished(),{
+    print('observeEvent of unfinished trigger')
+    if(nrow(unfinished())!=0){
       # treating start time as unique identifier for bottle (can't see scenario where we pull two bottles at the same time)
       # choice names = start time and volume of bottle
-      choice_names = unfinished_bottles%>%
+      choice_names = unfinished()%>%
         mutate(descriptive = paste0(start_volume,'fl. oz.\n','Started at ',
                                     #as.POSIXlt.character(start_time_utc,format='%d %b %H:%M'),
                                     force_tz(as.POSIXct(start_time),'America/New_York')%>%as.character(format='%d %b %H:%M',tz='America/New_York'),'\n'))%>%
         select(descriptive)
-      choice_values = unfinished_bottles$start_time
+      choice_values = unfinished()$start_time
       names(choice_values)<-choice_names$descriptive
       modify_ui(button_id="bottle_finish"#,mod_dict=ui_mods
                 )
-      # add radio buttons to select which unfinished bottle should be updated to finished
+      # add dropdown to select which unfinished bottle should be updated to finished
       insertUI('#finish_time', 'beforeBegin',
                selectInput('previous_bottle','select unfinished bottle',
                            # need to define choices based on previously logged bottles that weren't finished
                            choice_values,
                            selected=choice_values[[1]]))
-
     }else{
       insertUI(selector="#bottle_finish",
                where="afterEnd",
                ui=renderText("No Unfinished Bottles"))
+    }
+  })
+  observeEvent(input$previous_bottle,{
+    if(!is.null(input[['previous_bottle']])){
+      #print(input[['previous_bottle']])
+      #print(class(input[['previous_bottle']]))
+      #print('previous bottle selected')
+      #print(input$previous_bottle)
+      #print(unfinished()$start_time%>%as.character())
+      selected_max<-unfinished()%>% # unfinished SHOULD be present any time previous_bottle was created
+        filter(as.character(start_time)==input$previous_bottle)%>%
+        select(start_volume)%>%
+        unlist()
+      updateSliderInput(inputId="discarded",max=selected_max[[1]])
+    }else{
+      print('no previous bottle selected')
     }
   })
   # submit button observers for each of the above
@@ -330,14 +351,19 @@ server <- function(input, output, session) {
     to_update = logged_bottles%>%
       filter(as.character(start_time)==prev_bottle_reformatted)
     updated<-data.frame("start_time"=to_update$start_time,
-                        start_volume = to_update$start_volume,
-                        delayed_feed = to_update$delayed_feed,
-                        vitamin_d_drop = to_update$vitamin_d_drop,
-                        finished_bottle = TRUE,
+                        "start_volume" = to_update$start_volume,
+                        #"delayed_feed" = FALSE,
+                        "vitamin_d_drop" = to_update$vitamin_d_drop,
+                        "finished_bottle" = TRUE,
                         # forcing timezone to UTC since sheet will always assume UTC, even though actual recorded time will be EDT
-                        finish_time = force_tz(input$finish_time,'UTC'))
+                        "finish_time" = force_tz(input$finish_time,'UTC'),
+                        "source" = to_update$source,
+                        "start_fuss" = to_update$start_fuss,
+                        "start_sleep" = to_update$start_sleep,
+                        "finish_fuss" = input$finish_fuss,
+                        "finish_sleep" = input$finish_sleep,
+                        "discarded" = input$discarded)
     export_subset<-bind_rows(stay_same,updated)
-    print(export_subset)
     write_sheet(data = export_subset,
                 ss=workbook_id,sheet='bottle_start')
     # indicate submission was recorded
